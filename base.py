@@ -106,6 +106,10 @@ class bitalino(object):
 		for i in range(mov_number * reps_per_mov):
 			random.seed()
 			mov_type = random.randint(0, mov_number - 1)
+			if mov_type == 0:
+				mov_type = 1
+			else:
+				mov_type = 0
 			while mov_counter[mov_type] == 0:
 				mov_type = random.randint(0, mov_number - 1)
 			for i in self.movs:
@@ -173,6 +177,7 @@ class bitalino(object):
 		fnn = buildNetwork(self.traindata.indim, hidden_units, self.traindata.outdim)
 		# CHECK meaning of the parameters
 		trainer = BackpropTrainer(fnn, dataset=self.traindata, momentum=0.1, verbose=True, weightdecay=0.01)
+		print fnn
 		return fnn, trainer
 
 	def classify(self, net, trainer, num_it = 10):
@@ -204,6 +209,9 @@ class bitalino(object):
 		# ion()   # interactive graphics on
 		# draw()  # update the plot
 		out = net.activateOnDataset(self.data)
+		# TEMPORARY for just two movements
+		out[out < 1.4] = 1
+		out[out > 1.6] = 2
 		plt.plot(self.classification_proc,'r')
 		plt.hold(True)
 		plt.plot(out,'b')
@@ -271,11 +279,16 @@ class bitalino(object):
 		plt.title("Channel 3")
 		plt.plot(self.t, [b[2] for b in self.y],'r')
 		plt.show()
+		plt.plot(self.t, [b[1] for b in self.y],'b')
+		plt.hold(True)
+		plt.plot(self.t, [b[2] for b in self.y],'r')
+		plt.show()
 		print len(self.t_proc)
 
 if __name__ == '__main__':
 	bt = bitalino('98:D3:31:80:48:08',1000,[0,1,2,3,4,5])
-	bt.training_interface(2,3,3,5)
+	# Experiments made with parameters 2,3,3,5
+	bt.training_interface(2,3,3,2)
 	bt.data_process()
 	net, trainer = bt.init_classifier()
 	trainer = bt.classify(net, trainer)
