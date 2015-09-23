@@ -157,6 +157,7 @@ class bitalino(object):
 		np.savetxt('emg.txt', self.y)
 		np.savetxt('time.txt', self.t)
 		np.savetxt('class.txt', self.classification)
+		np.savetxt('net_out.txt', self.out)
 
 	def init_classifier(self, hidden_units = 5):
 		# Number of features, change me!
@@ -178,7 +179,7 @@ class bitalino(object):
 		# CHECK meaning of the parameters
 		trainer = BackpropTrainer(fnn, dataset=self.traindata, momentum=0.1, verbose=True, weightdecay=0.01)
 		print fnn
-		return fnn, trainer
+		return fnn, trainer, data
 
 	def classify(self, net, trainer, num_it = 1):
 		# Taken from pybrain wiki, repeats the training of the network num_it times trying to minimize the error
@@ -209,13 +210,13 @@ class bitalino(object):
 		# 	contourf(X, Y, out)   # plot the contour
 		# ion()   # interactive graphics on
 		# draw()  # update the plot
-		out = net.activateOnDataset(self.data)
+		self.out = net.activateOnDataset(self.data)
 		# TEMPORARY for just two movements
-		#out[out < 1.4] = 1
-		#out[out > 1.6] = 2
+		#self.out[self.out < 1.4] = 1
+		#self.out[self.out > 1.6] = 2
 		plt.plot(self.classification_proc,'r')
 		plt.hold(True)
-		plt.plot(out,'b')
+		plt.plot(self.out,'b')
 		plt.show()
 		return trainer, trnresult, tstresult
 
@@ -227,6 +228,7 @@ class bitalino(object):
 
 
 	def data_process(self):
+		self.factor = 0.01
 		for i in range(len(self.channels)):
 			tmp = [b[i] for b in self.y]
 			print i, mean(tmp)
@@ -247,7 +249,7 @@ class bitalino(object):
 		#self.y = abs(self.y)
 		self.y_proc = []
 		self.classification_proc = []
-		num_samp = self.samplingRate * 0.1
+		num_samp = self.samplingRate * self.factor
 		num_it = int(len(self.classification) / num_samp)
 		self.t_proc = []
 		for i in range(num_it):
@@ -258,7 +260,7 @@ class bitalino(object):
 				#print vect
 				tmp_row.append(mean(vect))
 			#print tmp_row
-			self.t_proc.append(i*0.1)
+			self.t_proc.append(i*self.factor)
 			self.y_proc.append(tmp_row)
 			#print self.y_proc
 			self.classification_proc.append(self.classification[i*num_samp])
@@ -294,14 +296,30 @@ class bitalino(object):
 		# plt.plot(self.t, [b[2] for b in self.y],'r')
 		# plt.show()
 		print len(self.t_proc)
+		return self.t_proc, self.y_proc, self.classification_proc
+
+		def close(self):
+			self.board.stop()
+			self.board.close()
 
 if __name__ == '__main__':
 	bt = bitalino('98:D3:31:80:48:08',1000,[0,2,4,5])
 	# Experiments made with parameters 2,3,3,5
 	bt.training_interface(5,3,3,2)
+	bt.board.close()
 	bt.data_process()
-	net, trainer = bt.init_classifier()
+	net, trainer, _ = bt.init_classifier()
 	trainer = bt.classify(net, trainer)
 	bt.save_training()
+	bt = bitalino('98:D3:31:80:48:08',1000,[0,2,4,5])
+	print "Testing acquisition"
+	bt.training_interface(5,1,3,2)
+	t,y,classification = bt.data_process()
+	_, _, test_data = bt.init_classifier()
+	test_out = net.activateOnDataset(test_data)
+	plt.plot(classification,'m')
+	plt.hold(True)
+	plt.plot(test_out,'g')
+	plt.show()
 	#t, y = bt.sample(10, True)
 	#bt.plot(t,y)
