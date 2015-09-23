@@ -33,7 +33,7 @@ class bitalino(object):
 
 		# Initialize the board
 		self.channels = channels
-
+		print self.channels
 
 	def initialize_time_series(self, total_time):
 		# Declare the time stamp and output lists
@@ -106,10 +106,10 @@ class bitalino(object):
 		for i in range(mov_number * reps_per_mov):
 			random.seed()
 			mov_type = random.randint(0, mov_number - 1)
-			if mov_type == 0:
-				mov_type = 1
-			else:
-				mov_type = 0
+			#if mov_type == 0:
+			#	mov_type = 1
+			#else:
+			#	mov_type = 0
 			while mov_counter[mov_type] == 0:
 				mov_type = random.randint(0, mov_number - 1)
 			for i in self.movs:
@@ -180,10 +180,11 @@ class bitalino(object):
 		print fnn
 		return fnn, trainer
 
-	def classify(self, net, trainer, num_it = 10):
+	def classify(self, net, trainer, num_it = 1):
 		# Taken from pybrain wiki, repeats the training of the network num_it times trying to minimize the error
 		for i in range(num_it):
-			trainer.trainEpochs(1)
+			#trainer.trainEpochs(5)
+			trainer.trainUntilConvergence(self.traindata, 1000)
 			trnresult = percentError( trainer.testOnClassData(), self.traindata['class'] )
 			tstresult = percentError( trainer.testOnClassData(dataset=self.testdata), self.testdata['class'] )
 			print "epoch: %4d" % trainer.totalepochs, "  train error: %5.2f%%" % trnresult, "  test error: %5.2f%%" % tstresult
@@ -210,8 +211,8 @@ class bitalino(object):
 		# draw()  # update the plot
 		out = net.activateOnDataset(self.data)
 		# TEMPORARY for just two movements
-		out[out < 1.4] = 1
-		out[out > 1.6] = 2
+		#out[out < 1.4] = 1
+		#out[out > 1.6] = 2
 		plt.plot(self.classification_proc,'r')
 		plt.hold(True)
 		plt.plot(out,'b')
@@ -246,7 +247,7 @@ class bitalino(object):
 		#self.y = abs(self.y)
 		self.y_proc = []
 		self.classification_proc = []
-		num_samp = self.samplingRate * 0.2
+		num_samp = self.samplingRate * 0.1
 		num_it = int(len(self.classification) / num_samp)
 		self.t_proc = []
 		for i in range(num_it):
@@ -257,7 +258,7 @@ class bitalino(object):
 				#print vect
 				tmp_row.append(mean(vect))
 			#print tmp_row
-			self.t_proc.append(i*0.2)
+			self.t_proc.append(i*0.1)
 			self.y_proc.append(tmp_row)
 			#print self.y_proc
 			self.classification_proc.append(self.classification[i*num_samp])
@@ -268,27 +269,36 @@ class bitalino(object):
 		#print self.y_proc
 		#print len(self.y_proc[:][1])
 		#print len(self.y_proc[1][:])
-		
-		plt.scatter(self.t_proc, [b[1] for b in self.y_proc])
+		for i in range(len(self.channels)):
+			print i
+			plt.scatter(self.t_proc, [b[i] for b in self.y_proc])
+			plt.hold(True)
+			plt.title("Channel " + str(i+1))
+			plt.plot(self.t, [b[i] for b in self.y],'r')
+			plt.show()
+		plt.plot(self.t, [b[0] for b in self.y],'b')
 		plt.hold(True)
-		plt.title("Channel 2")
 		plt.plot(self.t, [b[1] for b in self.y],'r')
+		plt.plot(self.t, [b[2] for b in self.y],'g')
+		plt.plot(self.t, [b[3] for b in self.y],'k')
+		#plt.plot(self.t, [b[4] for b in self.y],'m')
+		#plt.plot(self.t, [b[5] for b in self.y],'c')
 		plt.show()
-		plt.scatter(self.t_proc, [b[2] for b in self.y_proc])
-		plt.hold(True)
-		plt.title("Channel 3")
-		plt.plot(self.t, [b[2] for b in self.y],'r')
-		plt.show()
-		plt.plot(self.t, [b[1] for b in self.y],'b')
-		plt.hold(True)
-		plt.plot(self.t, [b[2] for b in self.y],'r')
-		plt.show()
+		# plt.scatter(self.t_proc, [b[2] for b in self.y_proc])
+		# plt.hold(True)
+		# plt.title("Channel 3")
+		# plt.plot(self.t, [b[2] for b in self.y],'r')
+		# plt.show()
+		# plt.plot(self.t, [b[1] for b in self.y],'b')
+		# plt.hold(True)
+		# plt.plot(self.t, [b[2] for b in self.y],'r')
+		# plt.show()
 		print len(self.t_proc)
 
 if __name__ == '__main__':
-	bt = bitalino('98:D3:31:80:48:08',1000,[0,1,2,3,4,5])
+	bt = bitalino('98:D3:31:80:48:08',1000,[0,2,4,5])
 	# Experiments made with parameters 2,3,3,5
-	bt.training_interface(2,3,3,2)
+	bt.training_interface(5,3,3,2)
 	bt.data_process()
 	net, trainer = bt.init_classifier()
 	trainer = bt.classify(net, trainer)
