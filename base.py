@@ -140,21 +140,21 @@ class bitalino(object):
 		# 	for r in writedict:
 		# 		print r
 		# 		writer.writerow(r)
-		np.savetxt('data/emg_' + pres_time + '.txt', self.y_proc)
-		np.savetxt('data/time_' + pres_time + '.txt', self.t_proc)
-		np.savetxt('data/class_' + pres_time + '.txt', self.classification_proc)
-		np.savetxt('data/net_out_' + pres_time + '.txt', self.out)
+		np.savetxt('data/' + pres_time + '_emg.txt', self.y_proc)
+		np.savetxt('data/' + pres_time + '_time.txt', self.t_proc)
+		np.savetxt('data/' + pres_time + '_class.txt', self.classification_proc)
+		np.savetxt('data/' + pres_time + '_net_out.txt', self.out)
 
 	def load_training(self, timestamp):
 		# NB!! Since the saving is very raw and does NOT preserve information about which channels are used,
 		# the following will only be accurate if there are six channels
 		timestamp = str(timestamp)
-		lt = np.loadtxt('data/time_' + timestamp + '.txt')
+		lt = np.loadtxt('data/' + timestamp + '_time.txt')
 		self.initialize_time_series(len(lt) / 1000)
 		self.t_proc = lt
-		ldemg = np.loadtxt('data/emg_' + timestamp + '.txt')
+		ldemg = np.loadtxt('data/' + timestamp + '_emg.txt')
 		self.y_proc = ldemg
-		self.classification_proc = np.loadtxt('data/class_' + timestamp + '.txt')
+		self.classification_proc = np.loadtxt('data/' + timestamp + '_class.txt')
 		#print ldemg.T
 
 	def init_classifier(self, hidden_units = 20):
