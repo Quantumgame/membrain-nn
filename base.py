@@ -16,7 +16,7 @@ class bitalino(object):
 
 	def __init__(self, macAddress = '98:D3:31:80:48:08', samplingRate = 1000, channels = [0,1,2,3,4,5]):
 
-		#self.board = BT.BITalino(macAddress)
+		self.board = BT.BITalino(macAddress)
 
 		# Sampling Rate (Hz)
 		self.dT = 1.0 / float(samplingRate)
@@ -51,7 +51,8 @@ class bitalino(object):
 			#print samples
 			for sample in samples:
 				self.y[self.cont,:] = sample[5:]
-				self.y[self.cont,4:] = self.y[self.cont,4:5] * 16
+				self.y[self.cont,4] = self.y[self.cont,4] * 16
+				self.y[self.cont,5] = self.y[self.cont,5] * 16
 				#print self.y
 				self.t[self.cont] = self.dT * self.cont
 				self.cont = self.cont + 1
@@ -192,7 +193,7 @@ class bitalino(object):
   		return np.sqrt(np.convolve(a2, window, 'same'))
 
 	def data_process(self):
-		factor = 0.2
+		factor = 0.05
 		rms_width = 500
 		for i in range(len(self.channels)):
 			tmp = [b[i] for b in self.y]
@@ -223,19 +224,19 @@ class bitalino(object):
 			self.t_proc.append(i*factor)
 			self.y_proc.append(tmp_row)
 			self.classification_proc.append(self.classification[i*num_samp])
-		#for i in range(len(self.channels)):
-		#	print i
-		#	plt.scatter(self.t_proc, [b[i] for b in self.y_proc])
-		#	plt.hold(True)
-		#	plt.title("Channel " + str(i+1))
-		#	plt.plot(self.t, [b[i] for b in self.y],'r')
-		#	plt.show()
+		for i in range(len(self.channels)):
+			print i
+			plt.scatter(self.t_proc, [b[i] for b in self.y_proc])
+			plt.hold(True)
+			plt.title("Channel " + str(i+1))
+			plt.plot(self.t, [b[i] for b in self.y],'r')
+			plt.show()
 		plt.figure()
 		plt.hold(True)
 		plot_colors = ['b','r','g','k','m','c']
 		# Plot the superimposed signals for debugging reasons
 		for i in range(len(self.channels)):
-			plt.plot(self.t, [b[0] for b in self.y],plot_colors[i])
+			plt.plot(self.t, [b[i] for b in self.y],plot_colors[i])
 		plt.show()
 		return self.t_proc, self.y_proc, self.classification_proc
 
@@ -245,13 +246,13 @@ class bitalino(object):
 
 if __name__ == '__main__':
 	bt = bitalino('98:D3:31:80:48:08',1000,[0,1,2,3,4,5])
-	bt.load_training(1)
-	print "Done Loading"
-	net, trainer, _ = bt.init_classifier()
-	trainer = bt.classify(net, trainer)
-	print "Done classifying"
-	bt.save_training()
-	print "Saved"
+	#bt.load_training(1)
+	#print "Done Loading"
+	#net, trainer, _ = bt.init_classifier()
+	#trainer = bt.classify(net, trainer)
+	#print "Done classifying"
+	#bt.save_training()
+	#print "Saved"
 	# Experiments made with parameters 5,3,3,2
 	bt.training_interface(5,1,3,2)
 	bt.board.close()
