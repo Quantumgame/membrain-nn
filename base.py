@@ -254,7 +254,7 @@ if __name__ == '__main__':
 	#bt.save_training()
 	#print "Saved"
 	# Experiments made with parameters 5,3,3,2
-	bt.training_interface(5,1,3,2)
+	bt.training_interface(5,3,3,2)
 	bt.board.close()
 	bt.data_process()
 	net, trainer, _ = bt.init_classifier()
