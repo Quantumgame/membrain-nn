@@ -3,18 +3,51 @@ import numpy as np
 import matplotlib.pyplot as plt
 import bitalino as BT
 import random
-#import csv
+import csv
+import neurolab as nl
 from pybrain.datasets import ClassificationDataSet
 from pybrain.tools.shortcuts import buildNetwork
 from pybrain.supervised.trainers import BackpropTrainer
 from pybrain.utilities import percentError
 from numpy import mean
+from pylab import ion, ioff, figure, draw, contourf, clf, show, hold, plot
+from scipy import diag, arange, meshgrid, where
 
+class TrainLM(Train):
+    
+    def __init__(self, net, input, target, **kwargs):
+        self.net = net
+        self.input = input
+        self.target = target
+        self.kwargs = kwargs
+        self.x0 = tool.np_get(net)
+        self.full_output = ()
+    
+    def fcn(self, x):
+        print x
+        tool.np_set(net, x)
+        output = net.sim(self.input)
+        err = self.error(self.net, self.input, self.target, output)
+        try:
+            self.epochf(err, self.net)
+        except TrainStop:
+            pass
+        print (self.target-output).flatten()
+        return (self.target-output).flatten()
+        
+    def __call__(self, net, input, target):
+        from scipy.optimize import leastsq
+        
+        self.full_output = leastsq(func=self.fcn, x0=self.x0, 
+                                    maxfev=self.epochs)
+
+trainlm = Trainer(TrainLM)
 
 class bitalino(object):
 
 
 	def __init__(self, macAddress = '98:D3:31:80:48:08', samplingRate = 1000, channels = [0,1,2,3,4,5]):
+
 
 		self.board = BT.BITalino(macAddress)
 
@@ -39,26 +72,29 @@ class bitalino(object):
 		self.t = np.zeros(totSamp)
 		self.classification = np.zeros(totSamp)
 		
-	def sample(self, sampTime):
+	def sample(self, sampTime, reset = False):
 		# Initialize variables to sample the correct amount of samples
 		# Two loops are needed, every transmission sends self.nSamp samples
 		# Thus, the number of transmissions is given by the total samples needed
 		# (found using the total time) divided by the samples per transmission
+		if reset == True:
+			self.initialize_time_series(sampTime)
 		Sampnum = int(sampTime * self.samplingRate)
 		transNum = int(Sampnum / self.nSamp)
+		#print "Start sampling..."
 		for n in range(transNum):
 			samples = self.board.read(self.nSamp)
 			#print samples
 			for sample in samples:
 				self.y[self.cont,:] = sample[5:]
-				self.y[self.cont,4] = self.y[self.cont,4] * 16
-				self.y[self.cont,5] = self.y[self.cont,5] * 16
 				#print self.y
 				self.t[self.cont] = self.dT * self.cont
-				self.cont = self.cont + 1
+		   		self.cont = self.cont + 1
+		#print "Finished sampling"
 		return self.t, self.y
 
 	def plot(self, t, y, plotChan = 'all'):
+		pass
 		if plotChan == 'all':
 			plotChan = self.channels
 		cont = 0
@@ -73,7 +109,7 @@ class bitalino(object):
 			plt.show()
 			cont = cont + 1
 
-	def training_interface(self, mov_number, reps_per_mov = 3, resting_time = 2, execution_time = 3):
+	def training_interface(self, mov_number, reps_per_mov = 4, resting_time = 2, execution_time = 3):
 		''' This function serves as an interactive interface for executing
 		the signal acquisition for the neural network. As such, it will ask
 		the user to input several parameters and it will execute the training routine
@@ -99,6 +135,10 @@ class bitalino(object):
 		for i in range(mov_number * reps_per_mov):
 			random.seed()
 			mov_type = random.randint(0, mov_number - 1)
+			#if mov_type == 0:
+			#	mov_type = 1
+			#else:
+			#	mov_type = 0
 			while mov_counter[mov_type] == 0:
 				mov_type = random.randint(0, mov_number - 1)
 			for i in self.movs:
@@ -115,6 +155,9 @@ class bitalino(object):
 			mov_counter[mov_type] = mov_counter[mov_type] - 1
 		for i in self.movs:
 			self.classification = self.classification + (i['ID'] + 1) * i['Classification']
+			# plt.figure()
+			# plt.plot(self.t, i['Classification'])
+			# plt.show()
 		return self.t, self.y, self.classification
 
 
@@ -126,7 +169,6 @@ class bitalino(object):
 				pass
 
 	def save_training(self):
-		pres_time = time.strftime("%Y%m%d-%H%M")
 		# writedict={'Time':self.t}
 		# cont = 0
 		# for channel in self.channels:
@@ -141,88 +183,131 @@ class bitalino(object):
 		# 	for r in writedict:
 		# 		print r
 		# 		writer.writerow(r)
-		np.savetxt('data/' + pres_time + '_emg.txt', self.y_proc)
-		np.savetxt('data/' + pres_time + '_time.txt', self.t_proc)
-		np.savetxt('data/' + pres_time + '_class.txt', self.classification_proc)
-		np.savetxt('data/' + pres_time + '_net_out.txt', self.out)
-
-	def load_training(self, timestamp):
-		# NB!! Since the saving is very raw and does NOT preserve information about which channels are used,
-		# the following will only be accurate if there are six channels
-		lt = np.loadtxt('data/' + timestamp + '_time.txt')
-		self.initialize_time_series(len(lt) / 1000)
-		self.t_proc = lt
-		ldemg = np.loadtxt('data/' + timestamp + '_emg.txt')
-		self.y_proc = ldemg
-		self.classification_proc = np.loadtxt('data/' + timestamp + '_class.txt')
-		#print ldemg.T
+		np.savetxt('emg.txt', self.y)
+		np.savetxt('time.txt', self.t)
+		np.savetxt('class.txt', self.classification)
 
 	def init_classifier(self, hidden_units = 20):
+		# Number of features, change me!
 		data = ClassificationDataSet(len(self.channels))
-		# Prepare the dataset
+		# Feature preparation, the one to work on!
 		for i in range(len(self.classification_proc)):
 			data.appendLinked(self.y_proc[i], self.classification_proc[i])
+		data.calculateStatistics()
+		print data.classHist
 		# Make global for test purposes
 		self.data = data
 		# Prepare training and test data, 75% - 25% proportion
 		self.testdata, self.traindata = data.splitWithProportion(0.25)
+		# Suggested, check why
+		#self.traindata._convertToOneOfMany()
+		#self.testdata._convertToOneOfMany()
 		# CHECK the number of hidden units
-		fnn = buildNetwork(self.traindata.indim, hidden_units, self.traindata.outdim)
+		fnn = buildNetwork(self.data.indim, hidden_units, self.traindata.outdim)
 		# CHECK meaning of the parameters
-		trainer = BackpropTrainer(fnn, dataset=self.traindata, momentum=0.1, verbose=True, weightdecay=0.01)
+		trainer = BackpropTrainer(fnn, dataset=self.data, momentum=0.0, verbose=True, weightdecay=0.01)
 		print fnn
-		return fnn, trainer, data
+		return fnn, trainer
 
-	def classify(self, net, trainer):
-		trainer.trainUntilConvergence(self.traindata, 200)
-		trnresult = percentError( trainer.testOnClassData(), self.traindata['class'] )
-		tstresult = percentError( trainer.testOnClassData(dataset=self.testdata), self.testdata['class'] )
-		print "epoch: %4d" % trainer.totalepochs, "  train error: %5.2f%%" % trnresult, "  test error: %5.2f%%" % tstresult
-		self.out = net.activateOnDataset(self.data)
-		# TODO - Thresholding to convert into discrete classes
+	#def classify(self, net, trainer, num_it = 1,inp,target):
+	def classify(self):
+		# Taken from pybrain wiki, repeats the training of the network num_it times trying to minimize the error
+		#for i in range(num_it):
+			#trainer.trainEpochs(5)
+		#	trainer.trainUntilConvergence(self.traindata, 1000, validationProportion=0.10)
+		#	trnresult = percentError( trainer.testOnClassData(), self.traindata['class'] )
+		#	tstresult = percentError( trainer.testOnClassData(dataset=self.testdata), self.testdata['class'] )
+		#	print "epoch: %4d" % trainer.totalepochs, "  train error: %5.2f%%" % trnresult, "  test error: %5.2f%%" % tstresult
+		#print len(self.t_proc)
+		# out = net.activateOnDataset(self.data)
+		# figure()
+		# tmpx = range(len(out))
+		# plt.scatter(tmpx, self.classification)
+		# hold(True)
+		# plt.scatter(tmpx, out, color='red')
+		# print len(out)
+		# print len(self.classification)
+		# figure(1)
+		# ioff()  # interactive graphics off
+		# clf()   # clear the plot
+		# hold(True) # overplot on
+		# for c in [0,1,2]:
+		# 	here, _ = where(self.testdata['class']==c)
+		# 	#print here
+		# 	plot(self.testdata['input'][here,0],self.testdata['input'][here,1],'o')
+		# if out.max()!=out.min():  # safety check against flat field
+		# 	contourf(X, Y, out)   # plot the contour
+		# ion()   # interactive graphics on
+		# draw()  # update the plot
+		#out = net.activateOnDataset(self.data)
+		# Taken from Neurolab - pythonhosted.org
+		net = nl.net.newff([[0, 200]],[20, 1])
+		net.trainf=trainlm
+		err = net.train(self.y_proc[:][1], self.classification,epochs=1000,show=10,goal=0.01)
+		out = net.sim(self.y_proc)
+
+		
+		# TEMPORARY for just two movements
+		#out[out < 1.4] = 1
+		#out[out > 1.6] = 2
 		plt.plot(self.classification_proc,'r')
 		plt.hold(True)
-		plt.plot(self.out,'b')
+		plt.plot(out,'b')
 		plt.show()
-		return trainer, trnresult, tstresult
+		plt.plot(error)
+		#return trainer, trnresult, tstresult
+		return out
 
 	def window_rms(self, a, window_size):
   		a2 = np.power(a,2)
   		window = np.ones(window_size)/float(window_size)
   		return np.sqrt(np.convolve(a2, window, 'same'))
 
+
+
 	def data_process(self):
-		factor = 0.05
-		rms_width = 500
 		for i in range(len(self.channels)):
 			tmp = [b[i] for b in self.y]
 			print i, mean(tmp)
 			tmp = tmp - mean(tmp)
-			res = self.window_rms(tmp, rms_width)
+			res = self.window_rms(tmp, 500)
+			#[b[i] for b in self.y_proc] = res
+			#print res
 			cont = 0
 			for j in self.y:
 				j[i] = res[cont]
 				cont = cont + 1
-		# Remove the 0 class (between the different movements)
+		# Remove the 0 class even though luca thinks it makes no sense
 		self.y = self.y[self.classification != 0][:]
 		self.t = self.t[self.classification != 0][:]
 		self.t = np.linspace(0,len(self.t)*self.dT,len(self.t))
 		self.classification = self.classification[self.classification != 0]
-		# Introduce y_proc and classification_proc that will contain the downsampled signal
+		# Rectify the signal
+		#self.y = abs(self.y)
 		self.y_proc = []
 		self.classification_proc = []
-		self.t_proc = []
-		num_samp = self.samplingRate * factor
+		num_samp = self.samplingRate * 0.1
 		num_it = int(len(self.classification) / num_samp)
-		# Downsample the signal by factor (average every factor seconds window)
+		self.t_proc = []
 		for i in range(num_it):
 			tmp_row = []
+
 			for col in range(len(self.channels)):
 				vect=[int(b[col]) for b in self.y[i*num_samp:(i+1)*num_samp]]
+				#print vect
 				tmp_row.append(mean(vect))
-			self.t_proc.append(i*factor)
+			#print tmp_row
+			self.t_proc.append(i*0.1)
 			self.y_proc.append(tmp_row)
+			#print self.y_proc
 			self.classification_proc.append(self.classification[i*num_samp])
+		#print self.y_proc
+		#for i in range(len(self.channels)):
+			#print i
+		#print len(self.t_proc)
+		#print self.y_proc
+		#print len(self.y_proc[:][1])
+		#print len(self.y_proc[1][:])
 		for i in range(len(self.channels)):
 			print i
 			plt.scatter(self.t_proc, [b[i] for b in self.y_proc])
@@ -230,45 +315,34 @@ class bitalino(object):
 			plt.title("Channel " + str(i+1))
 			plt.plot(self.t, [b[i] for b in self.y],'r')
 			plt.show()
-		plt.figure()
+		plt.plot(self.t, [b[0] for b in self.y],'b')
 		plt.hold(True)
-		plot_colors = ['b','r','g','k','m','c']
-		# Plot the superimposed signals for debugging reasons
-		for i in range(len(self.channels)):
-			plt.plot(self.t, [b[i] for b in self.y],plot_colors[i])
+		plt.plot(self.t, [b[1] for b in self.y],'r')
+		plt.plot(self.t, [b[2] for b in self.y],'g')
+		plt.plot(self.t, [b[3] for b in self.y],'k')
+		#plt.plot(self.t, [b[4] for b in self.y],'m')
+		#plt.plot(self.t, [b[5] for b in self.y],'c')
 		plt.show()
-		return self.t_proc, self.y_proc, self.classification_proc
+		# plt.scatter(self.t_proc, [b[2] for b in self.y_proc])
+		# plt.hold(True)
+		# plt.title("Channel 3")
+		# plt.plot(self.t, [b[2] for b in self.y],'r')
+		# plt.show()
+		# plt.plot(self.t, [b[1] for b in self.y],'b')
+		# plt.hold(True)
+		# plt.plot(self.t, [b[2] for b in self.y],'r')
+		# plt.show()
+		print len(self.t_proc)
 
-	def close(self):
-		self.board.stop()
-		self.board.close()
 
 if __name__ == '__main__':
-	bt = bitalino('98:D3:31:80:48:08',1000,[0,1,2,3,4,5])
-	bt.load_training("20151009-0959")
-	print "Done Loading"
-	net, trainer, _ = bt.init_classifier()
-	trainer = bt.classify(net, trainer)
-	print "Done classifying"
-	#bt.save_training()
-	#print "Saved"
-	# Experiments made with parameters 5,3,3,2
-	# bt.training_interface(5,3,3,2)
-	# bt.board.close()
-	# bt.data_process()
-	#net, trainer, _ = bt.init_classifier()
+	bt = bitalino('98:D3:31:80:48:08',1000,[0,2,4,5])
+	# Experiments made with parameters 2,3,3,5
+	bt.training_interface(3,1,1,1)
+	bt.data_process()
+	#net, trainer = bt.init_classifier()
 	#trainer = bt.classify(net, trainer)
-	#bt.save_training()
-	while True:
-		#bt = bitalino('98:D3:31:80:48:08',1000,[0,1,2,3,4,5])
-		print "Testing acquisition"
-		bt.training_interface(1,1,3,2)
-		t,y,classification = bt.data_process()
-		_, _, test_data = bt.init_classifier()
-		test_out = net.activateOnDataset(test_data)
-		print mean(test_out)
-		plt.plot(classification,'m')
-		plt.hold(True)
-		plt.plot(test_out,'g')
-		plt.show()
-		bt.board.stop()
+	out=bt.classify()
+	bt.save_training()
+	#t, y = bt.sample(10, True)
+	#bt.plot(t,y)
