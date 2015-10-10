@@ -137,7 +137,7 @@ class bitalino(object):
 		self.y_proc = ldemg
 		self.classification_proc = np.loadtxt('data/' + timestamp + '_class.txt')
 
-	def init_classifier(self, hidden_units = 1):
+	def init_classifier(self, hidden_units = 20):
 		data = ClassificationDataSet(len(self.channels), nb_classes=5)
 		# Prepare the dataset
 		for i in range(len(self.classification_proc)):
@@ -174,7 +174,7 @@ class bitalino(object):
 		for i in range(len(self.out)):
 			if round(self.out[i]) != self.testdata['target'][i]:
 				cnt = cnt + 1
-		print "Test error = ", (cnt / len(self.out)) * 100, " %"
+		print "Test error = ", (float(cnt) / float(len(self.out))) * 100, " %"
 		# TODO - Thresholding to convert into discrete classes
 		self.out = net.activateOnDataset(self.data)
 		plt.plot(self.classification_proc,'r')
@@ -236,7 +236,7 @@ if __name__ == '__main__':
 	if int(sys.argv[1]) == 1:
 		# Sample
 		# Experiments made with parameters 5,3,3,2
-		bt.training_interface(5,3,2,1)
+		bt.training_interface(5,3,2,2)
 		bt.data_process(factor = 0.05, rms_width = 500)
 	elif int(sys.argv[1]) == 0:
 		# Load data
@@ -252,7 +252,7 @@ if __name__ == '__main__':
 	while True:
 		bt = bitalino('98:D3:31:80:48:08',1000,[0,1,2,3,4,5])
 		print "Testing acquisition"
-		bt.training_interface(1,1,2,1)
+		bt.training_interface(1,1,2,2)
 		bt.board.close()
 		bt.data_process()
 		_, _, test_data = bt.init_classifier()
