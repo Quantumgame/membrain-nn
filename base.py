@@ -1,18 +1,16 @@
+import sys
 import time
 import numpy as np
 import matplotlib.pyplot as plt
 import bitalino as BT
 import random
-#import csv
 from pybrain.datasets import ClassificationDataSet
 from pybrain.tools.shortcuts import buildNetwork
 from pybrain.supervised.trainers import BackpropTrainer
 from pybrain.utilities import percentError
-from numpy import mean
-
+from numpy import mean, median
 
 class bitalino(object):
-
 
 	def __init__(self, macAddress = '98:D3:31:80:48:08', samplingRate = 1000, channels = [0,1,2,3,4,5]):
 
@@ -29,7 +27,6 @@ class bitalino(object):
 
 		# Initialize the board
 		self.channels = channels
-		print self.channels
 
 	def initialize_time_series(self, total_time):
 		# Declare the time stamp and output lists
@@ -90,7 +87,6 @@ class bitalino(object):
 		for i in range(mov_number):
 			st = raw_input("Insert the name of the movement: ")
 			self.movs.append({'ID' : i, 'Name' : st, 'Classification': np.zeros(len(self.t))})
-		print self.movs
 		# Start the real training algorithm, the user will be told to do random movements
 		mov_counter = np.ones(mov_number) * reps_per_mov
 		print "Starting the training algorithm... Relax your muscles"
@@ -117,7 +113,6 @@ class bitalino(object):
 			self.classification = self.classification + (i['ID'] + 1) * i['Classification']
 		return self.t, self.y, self.classification
 
-
 	def wait(self, dt):
 		t0 = time.time()
 		for i in range(dt):
@@ -127,20 +122,6 @@ class bitalino(object):
 
 	def save_training(self):
 		pres_time = time.strftime("%Y%m%d-%H%M")
-		# writedict={'Time':self.t}
-		# cont = 0
-		# for channel in self.channels:
-		# 	tmpst = 'Channel' + str(channel)
-		# 	writedict[tmpst] = self.y[:,cont]
-		# writedict['Classification'] = self.classification
-		# #print writedict
-		# with open('output.csv', 'w') as csvfile:
-		# 	fields = writedict.keys()
-		# 	writer = csv.DictWriter(csvfile,fieldnames = fields)
-		# 	writer.writeheader()
-		# 	for r in writedict:
-		# 		print r
-		# 		writer.writerow(r)
 		np.savetxt('data/' + pres_time + '_emg.txt', self.y_proc)
 		np.savetxt('data/' + pres_time + '_time.txt', self.t_proc)
 		np.savetxt('data/' + pres_time + '_class.txt', self.classification_proc)
@@ -155,7 +136,6 @@ class bitalino(object):
 		ldemg = np.loadtxt('data/' + timestamp + '_emg.txt')
 		self.y_proc = ldemg
 		self.classification_proc = np.loadtxt('data/' + timestamp + '_class.txt')
-		#print ldemg.T
 
 	def init_classifier(self, hidden_units = 20):
 		data = ClassificationDataSet(len(self.channels))
@@ -170,7 +150,6 @@ class bitalino(object):
 		fnn = buildNetwork(self.traindata.indim, hidden_units, self.traindata.outdim)
 		# CHECK meaning of the parameters
 		trainer = BackpropTrainer(fnn, dataset=self.traindata, momentum=0.1, verbose=True, weightdecay=0.01)
-		print fnn
 		return fnn, trainer, data
 
 	def classify(self, net, trainer):
@@ -191,12 +170,9 @@ class bitalino(object):
   		window = np.ones(window_size)/float(window_size)
   		return np.sqrt(np.convolve(a2, window, 'same'))
 
-	def data_process(self):
-		factor = 0.05
-		rms_width = 500
+	def data_process(self, factor=0.05, rms_width=500):
 		for i in range(len(self.channels)):
 			tmp = [b[i] for b in self.y]
-			print i, mean(tmp)
 			tmp = tmp - mean(tmp)
 			res = self.window_rms(tmp, rms_width)
 			cont = 0
@@ -223,13 +199,7 @@ class bitalino(object):
 			self.t_proc.append(i*factor)
 			self.y_proc.append(tmp_row)
 			self.classification_proc.append(self.classification[i*num_samp])
-		for i in range(len(self.channels)):
-			print i
-			plt.scatter(self.t_proc, [b[i] for b in self.y_proc])
-			plt.hold(True)
-			plt.title("Channel " + str(i+1))
-			plt.plot(self.t, [b[i] for b in self.y],'r')
-			plt.show()
+		#self.plot(self.t,self.y)
 		plt.figure()
 		plt.hold(True)
 		plot_colors = ['b','r','g','k','m','c']
@@ -239,36 +209,37 @@ class bitalino(object):
 		plt.show()
 		return self.t_proc, self.y_proc, self.classification_proc
 
-	def close(self):
-		self.board.stop()
-		self.board.close()
-
 if __name__ == '__main__':
+	'''
+	Arguments: sample: choose whether to sample or to just load the data (1 = sample, 0 = load)
+	filename: needed if the load mode is selected to tell which file to load
+	'''
 	bt = bitalino('98:D3:31:80:48:08',1000,[0,1,2,3,4,5])
-	bt.load_training("20151009-0959")
-	print "Done Loading"
+	if int(sys.argv[1]) == 1:
+		# Sample
+		# Experiments made with parameters 5,3,3,2
+		bt.training_interface(5,3,2,1)
+		bt.data_process(factor = 0.05, rms_width = 500)
+	elif int(sys.argv[1]) == 0:
+		# Load data
+		try:
+			bt.load_training(str(sys.argv[2]))
+		except:
+			raise IOError("Input file not found")
+	bt.board.close()
 	net, trainer, _ = bt.init_classifier()
 	trainer = bt.classify(net, trainer)
+	bt.save_training()
 	print "Done classifying"
-	#bt.save_training()
-	#print "Saved"
-	# Experiments made with parameters 5,3,3,2
-	# bt.training_interface(5,3,3,2)
-	# bt.board.close()
-	# bt.data_process()
-	#net, trainer, _ = bt.init_classifier()
-	#trainer = bt.classify(net, trainer)
-	#bt.save_training()
 	while True:
-		#bt = bitalino('98:D3:31:80:48:08',1000,[0,1,2,3,4,5])
+		bt = bitalino('98:D3:31:80:48:08',1000,[0,1,2,3,4,5])
 		print "Testing acquisition"
-		bt.training_interface(1,1,3,2)
-		t,y,classification = bt.data_process()
+		bt.training_interface(1,1,2,1)
+		bt.board.close()
+		bt.data_process()
 		_, _, test_data = bt.init_classifier()
 		test_out = net.activateOnDataset(test_data)
 		print mean(test_out)
-		plt.plot(classification,'m')
-		plt.hold(True)
-		plt.plot(test_out,'g')
+		print median(test_out)
+		plt.plot(test_out,'m')
 		plt.show()
-		bt.board.stop()
