@@ -12,6 +12,11 @@ from numpy import mean, median
 
 import gtk
 
+def print_to_txt(string):
+	gui.printer.insert_at_cursor(string)
+	while gtk.events_pending():
+  		gtk.main_iteration()
+
 class bitalino(object):
 
 	def __init__(self, macAddress = '98:D3:31:80:48:08', samplingRate = 1000, channels = [0,1,2,3,4,5]):
@@ -218,9 +223,17 @@ class gui (object):
         self.builder.add_from_file("membrain_gui.glade")
         self.builder.connect_signals(self)
 
+    def ret_printer(self):
+    	return self.builder.get_object("textbuffer")
+
     def run(self):
 		self.builder.get_object("window").show_all()
+		self.printer = self.builder.get_object("textbuffer")
+		#for i in range(100):
+		#	print_to_txt(str(i))
 		gtk.main()
+
+
 
     def window_destroy_cb(self, *args):
         gtk.main_quit()
@@ -231,8 +244,10 @@ if __name__ == '__main__':
 	Arguments: sample: choose whether to sample or to just load the data (1 = sample, 0 = load)
 	filename: needed if the load mode is selected to tell which file to load
 	'''
+	gui()
+	a = gui().ret_printer()
 	gui().run()
-	bt = bitalino('98:D3:31:80:48:08',1000,[0,1,2,3,4,5])
+	# bt = bitalino('98:D3:31:80:48:08',1000,[0,1,2,3,4,5])
 	if int(sys.argv[1]) == 1:
 		# Sample
 		# Experiments made with parameters 5,3,3,2
