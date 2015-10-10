@@ -137,8 +137,8 @@ class bitalino(object):
 		self.y_proc = ldemg
 		self.classification_proc = np.loadtxt('data/' + timestamp + '_class.txt')
 
-	def init_classifier(self, hidden_units = 20):
-		data = ClassificationDataSet(len(self.channels))
+	def init_classifier(self, hidden_units = 1):
+		data = ClassificationDataSet(len(self.channels), nb_classes=5)
 		# Prepare the dataset
 		for i in range(len(self.classification_proc)):
 			data.appendLinked(self.y_proc[i], self.classification_proc[i])
@@ -146,19 +146,37 @@ class bitalino(object):
 		self.data = data
 		# Prepare training and test data, 75% - 25% proportion
 		self.testdata, self.traindata = data.splitWithProportion(0.25)
+		#self.traindata._convertToOneOfMany()
+		#self.testdata._convertToOneOfMany()
 		# CHECK the number of hidden units
 		fnn = buildNetwork(self.traindata.indim, hidden_units, self.traindata.outdim)
 		# CHECK meaning of the parameters
-		trainer = BackpropTrainer(fnn, dataset=self.traindata, momentum=0.1, verbose=True, weightdecay=0.01)
+		trainer = BackpropTrainer(fnn, dataset=self.traindata, momentum=0, verbose=True, weightdecay=0.01)
 		return fnn, trainer, data
 
 	def classify(self, net, trainer):
-		trainer.trainUntilConvergence(self.traindata, 200)
-		trnresult = percentError( trainer.testOnClassData(), self.traindata['class'] )
-		tstresult = percentError( trainer.testOnClassData(dataset=self.testdata), self.testdata['class'] )
-		print "epoch: %4d" % trainer.totalepochs, "  train error: %5.2f%%" % trnresult, "  test error: %5.2f%%" % tstresult
-		self.out = net.activateOnDataset(self.data)
+		trainer.trainUntilConvergence(self.traindata,200)
+		print "inizio"
+		print self.traindata['target']
+		print "fine"
+		#trnresult = percentError( roundtrainer.testOnClassData(), self.traindata['target'] )
+		#tstresult = percentError( trainer.testOnClassData(dataset=self.testdata), self.testdata['target'] )
+		print "epoch: %4d" % trainer.totalepochs
+		self.out = net.activateOnDataset(self.traindata)
+		cnt = 0
+		for i in range(len(self.out)):
+			print round(self.out[i]), self.traindata['target'][i] 
+			if round(self.out[i]) != self.traindata['target'][i]:
+				cnt = cnt + 1
+		print "Train error = ", (float(cnt) / float(len(self.out))) * 100, " %"
+		self.out = net.activateOnDataset(self.testdata)
+		cnt = 0
+		for i in range(len(self.out)):
+			if round(self.out[i]) != self.testdata['target'][i]:
+				cnt = cnt + 1
+		print "Test error = ", (cnt / len(self.out)) * 100, " %"
 		# TODO - Thresholding to convert into discrete classes
+		self.out = net.activateOnDataset(self.data)
 		plt.plot(self.classification_proc,'r')
 		plt.hold(True)
 		plt.plot(self.out,'b')
