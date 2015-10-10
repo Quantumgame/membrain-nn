@@ -10,6 +10,8 @@ from pybrain.supervised.trainers import BackpropTrainer
 from pybrain.utilities import percentError
 from numpy import mean, median
 
+import gtk
+
 class bitalino(object):
 
 	def __init__(self, macAddress = '98:D3:31:80:48:08', samplingRate = 1000, channels = [0,1,2,3,4,5]):
@@ -209,11 +211,27 @@ class bitalino(object):
 		plt.show()
 		return self.t_proc, self.y_proc, self.classification_proc
 
+class gui (object):
+
+    def __init__(self):
+        self.builder = gtk.Builder()
+        self.builder.add_from_file("membrain_gui.glade")
+        self.builder.connect_signals(self)
+
+    def run(self):
+		self.builder.get_object("window").show_all()
+		gtk.main()
+
+    def window_destroy_cb(self, *args):
+        gtk.main_quit()
+
+
 if __name__ == '__main__':
 	'''
 	Arguments: sample: choose whether to sample or to just load the data (1 = sample, 0 = load)
 	filename: needed if the load mode is selected to tell which file to load
 	'''
+	gui().run()
 	bt = bitalino('98:D3:31:80:48:08',1000,[0,1,2,3,4,5])
 	if int(sys.argv[1]) == 1:
 		# Sample
