@@ -159,8 +159,6 @@ class bitalino(object):
 		print "inizio"
 		print self.traindata['target']
 		print "fine"
-		#trnresult = percentError( roundtrainer.testOnClassData(), self.traindata['target'] )
-		#tstresult = percentError( trainer.testOnClassData(dataset=self.testdata), self.testdata['target'] )
 		print "epoch: %4d" % trainer.totalepochs
 		self.out = net.activateOnDataset(self.traindata)
 		cnt = 0
@@ -181,7 +179,7 @@ class bitalino(object):
 		plt.hold(True)
 		plt.plot(self.out,'b')
 		plt.show()
-		return trainer, trnresult, tstresult
+		return trainer
 
 	def window_rms(self, a, window_size):
   		a2 = np.power(a,2)
