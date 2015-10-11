@@ -10,18 +10,12 @@ from pybrain.supervised.trainers import BackpropTrainer
 from pybrain.utilities import percentError
 from numpy import mean, median
 
-import gtk
-
-def print_to_txt(string):
-	gui.printer.insert_at_cursor(string)
-	while gtk.events_pending():
-  		gtk.main_iteration()
-
 class bitalino(object):
 
+	
 	def __init__(self, macAddress = '98:D3:31:80:48:08', samplingRate = 1000, channels = [0,1,2,3,4,5]):
 
-		self.board = BT.BITalino(macAddress)
+		#self.board = BT.BITalino(macAddress)
 
 		# Sampling Rate (Hz)
 		self.dT = 1.0 / float(samplingRate)
@@ -42,6 +36,14 @@ class bitalino(object):
 		self.y = np.zeros((totSamp, len(self.channels)))
 		self.t = np.zeros(totSamp)
 		self.classification = np.zeros(totSamp)
+
+	def initialize_test_time_series(self, total_time):
+		# Declare the time stamp and output lists
+		self.cont = 0
+		totSamp = int(total_time * self.samplingRate)
+		self.y = np.zeros((totSamp, len(self.channels)))
+		self.t = np.zeros(totSamp)
+		self.classification = np.ones(totSamp)
 		
 	def sample(self, sampTime):
 		# Initialize variables to sample the correct amount of samples
@@ -51,6 +53,7 @@ class bitalino(object):
 		Sampnum = int(sampTime * self.samplingRate)
 		transNum = int(Sampnum / self.nSamp)
 		for n in range(transNum):
+			print n
 			samples = self.board.read(self.nSamp)
 			#print samples
 			for sample in samples:
@@ -77,6 +80,17 @@ class bitalino(object):
 			plt.show()
 			cont = cont + 1
 
+	def get_mov_names(self, mov_number, reps_per_mov, resting_time, execution_time):
+		self.movs = []
+
+		# Slightly cryptic: The total duration of the time series will be given by the number of
+		# movements time the number of repetitions time the resting time (between movements) + execution time
+		self.initialize_time_series(mov_number * reps_per_mov * (resting_time + execution_time))
+
+		for i in range(mov_number):
+			st = raw_input("Insert the name of the movement: ")
+			self.movs.append({'ID' : i, 'Name' : st, 'Classification': np.zeros(len(self.t))})
+
 	def training_interface(self, mov_number, reps_per_mov = 3, resting_time = 2, execution_time = 3):
 		''' This function serves as an interactive interface for executing
 		the signal acquisition for the neural network. As such, it will ask
@@ -87,14 +101,9 @@ class bitalino(object):
 		movement and the classification (binary, true or false). The classification is just
 		a list, the time will be given by a shared time variable, as well as the EMG signal
 		'''
-		self.movs = []
-		# Slightly cryptic: The total duration of the time series will be given by the number of
-		# movements time the number of repetitions time the resting time (between movements) + execution time
-		self.initialize_time_series(mov_number * reps_per_mov * (resting_time + execution_time))
-		for i in range(mov_number):
-			st = raw_input("Insert the name of the movement: ")
-			self.movs.append({'ID' : i, 'Name' : st, 'Classification': np.zeros(len(self.t))})
+
 		# Start the real training algorithm, the user will be told to do random movements
+		self.board = BT.BITalino('98:D3:31:80:48:08')
 		mov_counter = np.ones(mov_number) * reps_per_mov
 		print "Starting the training algorithm... Relax your muscles"
 		self.wait(resting_time)
@@ -116,8 +125,30 @@ class bitalino(object):
 					i['Classification'][tmpcont:self.cont] = 1
 					print "Stop!"
 			mov_counter[mov_type] = mov_counter[mov_type] - 1
+		self.board.stop()
 		for i in self.movs:
 			self.classification = self.classification + (i['ID'] + 1) * i['Classification']
+		return self.t, self.y, self.classification
+
+	def post_learning_interface(self, resting_time = 2, execution_time = 3):
+		
+		# Slightly cryptic: The total duration of the time series will be given by the number of
+		# movements time the number of repetitions time the resting time (between movements) + execution time
+		self.initialize_test_time_series(resting_time + execution_time)
+
+		# Start the real training algorithm, the user will be told to do random movements
+		print "Starting the training algorithm... Relax your muscles"
+		self.wait(resting_time)
+		self.board.start(self.samplingRate, self.channels)
+		# The user prepares to execute the movement, the signal is sampled (it will be classified as no movement)
+		print "Prepare movement..."
+		self.sample(resting_time)
+		# Save the counter to update the class correctly
+		tmpcont = self.cont
+		print "Execute movement NOW!"
+		self.sample(execution_time)
+		self.board.stop()
+		print "Stop!"
 		return self.t, self.y, self.classification
 
 	def wait(self, dt):
@@ -137,40 +168,60 @@ class bitalino(object):
 	def load_training(self, timestamp):
 		# NB!! Since the saving is very raw and does NOT preserve information about which channels are used,
 		# the following will only be accurate if there are six channels
-		lt = np.loadtxt('data/' + timestamp + '_time.txt')
-		self.initialize_time_series(len(lt) / 1000)
-		self.t_proc = lt
-		ldemg = np.loadtxt('data/' + timestamp + '_emg.txt')
-		self.y_proc = ldemg
-		self.classification_proc = np.loadtxt('data/' + timestamp + '_class.txt')
+		self.board = BT.BITalino('98:D3:31:80:48:08')
+		try:
+			lt = np.loadtxt('data/' + timestamp + '_time.txt')
+			self.initialize_time_series(len(lt) / 1000)
+			self.t_proc = lt
+			ldemg = np.loadtxt('data/' + timestamp + '_emg.txt')
+			self.y_proc = ldemg
+			self.classification_proc = np.loadtxt('data/' + timestamp + '_class.txt')
+		except:
+			raise IOError("Input file not found")
 
 	def init_classifier(self, hidden_units = 20):
-		data = ClassificationDataSet(len(self.channels))
+		data = ClassificationDataSet(len(self.channels), nb_classes=5)
 		# Prepare the dataset
 		for i in range(len(self.classification_proc)):
 			data.appendLinked(self.y_proc[i], self.classification_proc[i])
 		# Make global for test purposes
 		self.data = data
 		# Prepare training and test data, 75% - 25% proportion
-		self.testdata, self.traindata = data.splitWithProportion(0.25)
+		self.testdata, self.traindata = data.splitWithProportion(0.05)
+		#self.traindata._convertToOneOfMany()
+		#self.testdata._convertToOneOfMany()
 		# CHECK the number of hidden units
 		fnn = buildNetwork(self.traindata.indim, hidden_units, self.traindata.outdim)
 		# CHECK meaning of the parameters
-		trainer = BackpropTrainer(fnn, dataset=self.traindata, momentum=0.1, verbose=True, weightdecay=0.01)
+		trainer = BackpropTrainer(fnn, dataset=self.traindata, momentum=0, verbose=True, weightdecay=0.01)
 		return fnn, trainer, data
 
 	def classify(self, net, trainer):
-		trainer.trainUntilConvergence(self.traindata, 200)
-		trnresult = percentError( trainer.testOnClassData(), self.traindata['class'] )
-		tstresult = percentError( trainer.testOnClassData(dataset=self.testdata), self.testdata['class'] )
-		print "epoch: %4d" % trainer.totalepochs, "  train error: %5.2f%%" % trnresult, "  test error: %5.2f%%" % tstresult
-		self.out = net.activateOnDataset(self.data)
+		trainer.trainUntilConvergence(self.traindata,200)
+		print "inizio"
+		print self.traindata['target']
+		print "fine"
+		print "epoch: %4d" % trainer.totalepochs
+		self.out = net.activateOnDataset(self.traindata)
+		cnt = 0
+		for i in range(len(self.out)):
+			print round(self.out[i]), self.traindata['target'][i] 
+			if round(self.out[i]) != self.traindata['target'][i]:
+				cnt = cnt + 1
+		print "Train error = ", (float(cnt) / float(len(self.out))) * 100, " %"
+		self.out = net.activateOnDataset(self.testdata)
+		cnt = 0
+		for i in range(len(self.out)):
+			if round(self.out[i]) != self.testdata['target'][i]:
+				cnt = cnt + 1
+		print "Test error = ", (float(cnt) / float(len(self.out))) * 100, " %"
 		# TODO - Thresholding to convert into discrete classes
+		self.out = net.activateOnDataset(self.data)
 		plt.plot(self.classification_proc,'r')
 		plt.hold(True)
 		plt.plot(self.out,'b')
 		plt.show()
-		return trainer, trnresult, tstresult
+		return trainer
 
 	def window_rms(self, a, window_size):
   		a2 = np.power(a,2)
@@ -216,63 +267,42 @@ class bitalino(object):
 		plt.show()
 		return self.t_proc, self.y_proc, self.classification_proc
 
-class gui (object):
-
-    def __init__(self):
-        self.builder = gtk.Builder()
-        self.builder.add_from_file("membrain_gui.glade")
-        self.builder.connect_signals(self)
-
-    def ret_printer(self):
-    	return self.builder.get_object("textbuffer")
-
-    def run(self):
-		self.builder.get_object("window").show_all()
-		self.printer = self.builder.get_object("textbuffer")
-		#for i in range(100):
-		#	print_to_txt(str(i))
-		gtk.main()
-
-
-
-    def window_destroy_cb(self, *args):
-        gtk.main_quit()
-
-
 if __name__ == '__main__':
 	'''
 	Arguments: sample: choose whether to sample or to just load the data (1 = sample, 0 = load)
 	filename: needed if the load mode is selected to tell which file to load
 	'''
-	gui()
-	a = gui().ret_printer()
-	gui().run()
-	# bt = bitalino('98:D3:31:80:48:08',1000,[0,1,2,3,4,5])
+	bt = bitalino('98:D3:31:80:48:08',1000,[0,1,2,3,4,5])
+	mov_number = 5
+	num_repetitions = 5
+	setup_time = 2
+	execution_time = 2
 	if int(sys.argv[1]) == 1:
+		bt.get_mov_names(mov_number, num_repetitions, setup_time, execution_time)
 		# Sample
 		# Experiments made with parameters 5,3,3,2
-		bt.training_interface(5,3,2,1)
+		bt.training_interface(mov_number, num_repetitions, setup_time, execution_time)
 		bt.data_process(factor = 0.05, rms_width = 500)
 	elif int(sys.argv[1]) == 0:
 		# Load data
-		try:
-			bt.load_training(str(sys.argv[2]))
-		except:
-			raise IOError("Input file not found")
-	bt.board.close()
-	net, trainer, _ = bt.init_classifier()
-	trainer = bt.classify(net, trainer)
-	bt.save_training()
-	print "Done classifying"
-	while True:
-		bt = bitalino('98:D3:31:80:48:08',1000,[0,1,2,3,4,5])
-		print "Testing acquisition"
-		bt.training_interface(1,1,2,1)
+		bt.load_training(str(sys.argv[2]))
+		bt.board.start
+	try:	
+		net, trainer, _ = bt.init_classifier()
+		trainer = bt.classify(net, trainer)
+		bt.save_training()
+		print "Done classifying"
+		while True:
+			print "Testing acquisition"
+			bt.post_learning_interface(setup_time, execution_time)
+			bt.data_process()
+			_, _, test_data = bt.init_classifier()
+			test_out = net.activateOnDataset(test_data)
+			print mean(test_out)
+			print median(test_out)
+			plt.plot(test_out,'m')
+			plt.show()
 		bt.board.close()
-		bt.data_process()
-		_, _, test_data = bt.init_classifier()
-		test_out = net.activateOnDataset(test_data)
-		print mean(test_out)
-		print median(test_out)
-		plt.plot(test_out,'m')
-		plt.show()
+	except:
+		print sys.exc_info()[0]
+		bt.board.close()
